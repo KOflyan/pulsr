@@ -1,1 +1,3 @@
-console.log('abc')
+import { run } from './cli'
+
+run()
