@@ -1,80 +1,176 @@
 import cluster, { Worker } from 'node:cluster'
 import * as util from 'node:util'
+import pidusage, { Status } from 'pidusage'
 
 import { logger } from '../utils/logger.utils'
-import pidusage, { Status } from 'pidusage'
-import { AppConfig } from '../config'
+import { config } from '../config'
+import { retryWithExponentialBackoff, sleep } from '../utils/async.utils'
+import { v4 } from 'uuid'
+import * as process from 'node:process'
 
-const activeProcesses: Record<number, Worker> = {}
+const activeProcesses: Record<string, ProcessMeta> = {}
 
-export function createProcess(config: AppConfig): Worker {
+export type ProcessMeta = {
+  worker: Worker
+  isBeingRestarted: boolean
+  isAlive: boolean
+}
+
+export async function createProcess(existingUid?: string): Promise<Worker> {
   const child = cluster.fork()
 
-  registerProcess(child)
+  const processUid = existingUid ?? registerProcess(child)
+
+  if (!processUid) {
+    throw new Error(`Could not register process!`)
+  }
 
   child.process.stdout?.on('data', (data) => logger.info(data, child.process.pid))
   child.process.stderr?.on('data', (data) => logger.error(data, child.process.pid))
 
   child.on('error', (e) => {
-    logger.error(`Error event received from child process: ${e}`)
-    logger.error(util.inspect(e))
+    logger.error(`Error event received from child process: ${e.message}`, child.process.pid)
+    logger.error(util.inspect(e), child.process.pid)
   })
 
-  child.on('disconnect', () => {
+  child.on('disconnect', async () => {
     const pid = child.process.pid
+    const proc = activeProcesses[processUid]
+
+    if (!proc) {
+      logger.error(`Process "${pid}" not found in the active processes list!`)
+      return
+    }
+
+    proc.isAlive = false
+
     logger.warn('Process disconnected!', pid)
 
-    if (pid && getProcessByPid(pid) && !config.disableAutoRestart) {
+    if (!config.disableAutoRestart && !proc.isBeingRestarted) {
       logger.warn('Replacing dead process...', pid)
-      recreateProcess(pid, config)
+
+      await recreateProcess(processUid)
     }
+
+    if (config.disableAutoRestart) {
+      destroyProcess(processUid)
+    }
+
+    checkIfProcessPoolExhausted()
   })
 
   return child
 }
 
-export function getActiveProcesses(): Record<number, Worker> {
-  return activeProcesses
+export function getPidsOfActiveProcesses(): number[] {
+  return Object.values(activeProcesses).map((p) => p.worker.process.pid) as number[]
 }
 
-export function getProcessByPid(pid: number): Worker | null {
-  return activeProcesses[pid] ?? null
+export function getProcessByPid(pid: number): [string, ProcessMeta] | null {
+  return Object.entries(activeProcesses).find(([_, p]) => p.worker.process.pid === pid) ?? null
 }
 
-export function destroyProcess(pid: number): void {
-  const existingProcess = activeProcesses[pid]
+export function destroyProcess(uid: string): void {
+  const existingProcess = activeProcesses[uid]
 
   if (!existingProcess) {
-    throw new Error(`No process is registered for the id: "${pid}"`)
+    throw new Error(`No process is registered for the uid: "${uid}"`)
   }
 
-  existingProcess.destroy('sigterm')
+  existingProcess.worker.destroy('sigterm')
 
-  delete activeProcesses[pid]
+  delete activeProcesses[uid]
 }
 
-export function recreateProcess(pid: number, config: AppConfig): void {
-  destroyProcess(pid)
+export async function recreateProcess(uid: string): Promise<void> {
+  const activeProcess = activeProcesses[uid]
 
-  const child = createProcess(config)
+  if (!activeProcess) {
+    return logger.error(`No active process found for uid: ${uid}`)
+  }
 
-  child.on('online', () => {
-    logger.info(`Process "${pid}" was successfully recreated, new pid: "${child.process.pid}"`)
+  activeProcess.isBeingRestarted = true
+
+  activeProcess.worker.destroy()
+
+  await sleep(500) // SIGTERM can take some time to be applied
+
+  let child: Worker | null
+
+  if (config.useExponentialBackoff) {
+    child = await attemptToCreateProcessWithExponentialBackoff(activeProcess, uid)
+  } else {
+    child = await createProcess(uid)
+  }
+
+  activeProcess.isBeingRestarted = false
+
+  if (!child) {
+    logger.error(`Could not recreate process!`)
+
+    delete activeProcesses[uid]
+
+    return checkIfProcessPoolExhausted()
+  }
+
+  activeProcess.worker = child
+}
+
+export async function getResourceConsumptionMetricsForActiveProcesses(): Promise<
+  Record<number, Status>
+> {
+  const processIds = Object.values(activeProcesses)
+    .filter((p) => p.isAlive && !p.isBeingRestarted && p.worker.process.pid)
+    .map((p) => p.worker.process.pid) as number[]
+
+  if (!processIds.length) {
+    return {}
+  }
+
+  return pidusage(processIds)
+}
+
+function attemptToCreateProcessWithExponentialBackoff(
+  processMetadata: ProcessMeta,
+  uid: string,
+): Promise<Worker | null> {
+  return retryWithExponentialBackoff({
+    fn: async () => {
+      const result = await createProcess(uid)
+
+      processMetadata.isAlive = true
+      processMetadata.worker = result
+
+      await sleep(500) // Safeguard in case process fails immediately
+
+      if (!processMetadata.isAlive) {
+        result.destroy()
+        return null
+      }
+
+      return result
+    },
+    description: 'create process',
   })
 }
 
-export async function getResourceConsumptionMetricsForActiveProcesses(): Promise<Status[]> {
-  return Promise.all(Object.keys(getActiveProcesses()).map((pid) => pidusage(pid)))
-}
-
-function registerProcess(worker: Worker): void {
+function registerProcess(worker: Worker): string | null {
   const pid = extractPid(worker)
 
-  if (pid in activeProcesses) {
-    return logger.info(`"${pid}" already registered`)
+  if (getProcessByPid(pid)) {
+    logger.warn(`"${pid}" is already registered!`)
+    return null
   }
 
-  activeProcesses[pid] = worker
+  const uid = v4()
+
+  activeProcesses[uid] = {
+    worker,
+    isBeingRestarted: false,
+    isAlive: true,
+  }
+
+  return uid
 }
 
 function extractPid(worker: Worker): number {
@@ -85,4 +181,12 @@ function extractPid(worker: Worker): number {
   }
 
   return pid
+}
+
+function checkIfProcessPoolExhausted() {
+  if (!Object.keys(activeProcesses).length) {
+    logger.info(`No active processes remain, exiting.`)
+
+    process.exit(0)
+  }
 }

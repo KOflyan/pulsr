@@ -1,36 +1,50 @@
 import { convertFromBytes } from '../utils/number.utils'
 import {
+  getPidsOfActiveProcesses,
   getProcessByPid,
   getResourceConsumptionMetricsForActiveProcesses,
   recreateProcess,
 } from './manager'
 import { logger } from '../utils/logger.utils'
-import { AppConfig, config, MemoryUnit } from '../config'
+import { config, MemoryUnit } from '../config'
+import { nonOverlappingInterval } from '../utils/async.utils'
+import { Status } from 'pidusage'
 
-export function attachClusterListeners(config: AppConfig): void {
-  setInterval(metricsCollector, config.metricCollectionIntervalMs)
+export function attachClusterListeners(): void {
+  nonOverlappingInterval(metricsCollector, config.metricCollectionIntervalMs)
 }
 
 async function metricsCollector() {
-  const metrics = await getResourceConsumptionMetricsForActiveProcesses()
+  let metrics: Record<number, Status>
 
-  for (const metric of metrics) {
+  try {
+    metrics = await getResourceConsumptionMetricsForActiveProcesses()
+  } catch (e) {
+    logger.error(
+      `Failed to collect metrics for the PIDs (${Object.keys(getPidsOfActiveProcesses())}): ${(e as Error).message} `,
+    )
+    return
+  }
+
+  for (const metric of Object.values(metrics)) {
+    const proc = getProcessByPid(metric.pid)
     const unit = config.maxMemoryRestart?.unit ?? MemoryUnit.MB
     const actualMemory = convertFromBytes(metric.memory, unit)
     const actualMemoryReadable = `${Math.round(actualMemory)}${unit}`
 
-    logger.debug(`Worker ${metric.pid} memory consumption is ${actualMemoryReadable}`)
+    logger.debug(`Worker (pid=${metric.pid}) memory consumption is ${actualMemoryReadable}`)
 
     if (
       config.maxMemoryRestart &&
-      getProcessByPid(metric.pid) != null &&
+      !config.disableAutoRestart &&
+      proc &&
       actualMemory >= config.maxMemoryRestart.value
     ) {
       logger.warn(
         `Memory usage threshold of ${config.maxMemoryRestart.readable} exceeded for process "${metric.pid}", current value: ${actualMemoryReadable}. Recreating the process...`,
       )
 
-      recreateProcess(metric.pid, config)
+      await recreateProcess(proc[0])
     }
   }
 }

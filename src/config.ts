@@ -13,15 +13,19 @@ export type MaxMemoryRestart = {
 
 export type AppConfig = {
   maxMemoryRestart?: MaxMemoryRestart
-  maxRestartAttempts?: number
-  processes?: number
+  processes: number
+  maxConsecutiveRetries: number
   disableAutoRestart: boolean
+  useExponentialBackoff: boolean
   metricCollectionIntervalMs: number
   verbose: boolean
 }
 
 export const config: AppConfig = {
   metricCollectionIntervalMs: 500,
+  maxConsecutiveRetries: 3,
+  processes: 1,
+  useExponentialBackoff: false,
   verbose: false,
   disableAutoRestart: false,
 }

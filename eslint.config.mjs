@@ -35,6 +35,17 @@ export default [
     rules: {
       semi: ['error', 'never'],
       'prettier/prettier': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/no-shadow': 'warn',
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
+      '@typescript-eslint/no-empty-function': ['warn', { allow: ['methods'] }],
+      '@typescript-eslint/interface-name-prefix': 'off',
+      '@typescript-eslint/explicit-module-boundary-types': 'off',
+      '@typescript-eslint/no-inferrable-types': 'off',
+      'eol-last': ['error', 'always'],
     },
   },
 ]

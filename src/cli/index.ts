@@ -3,7 +3,7 @@ import * as pkg from '../../package.json'
 
 import { configureStartCommand } from './action/start'
 import { config } from '../config'
-import { logger } from '../utils/logger.utils'
+import { logger, LogLevel } from '../utils/logger.utils'
 
 type CommandConfigurationFunction = (cmd: Command) => void
 
@@ -24,6 +24,8 @@ export function run() {
   program.parse()
 
   config.verbose = program.getOptionValue('verbose') ?? false
+
+  logger.setLevel(config.verbose ? LogLevel.DEBUG : LogLevel.INFO)
 
   logger.debug(`Executing command with the following config: ${JSON.stringify(config, null, 2)}`)
 }
