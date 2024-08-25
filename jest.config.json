@@ -2,15 +2,21 @@
   "verbose": true,
   "clearMocks": true,
   "preset": "ts-jest",
+  "globalSetup": "<rootDir>/test/setup.ts",
   "testEnvironment": "node",
   "moduleFileExtensions": ["js", "json", "ts"],
   "coverageProvider": "v8",
   "rootDir": ".",
   "slowTestThreshold": 1,
   "testRegex": ".*\\.spec\\.ts$",
-  "coveragePathIgnorePatterns": ["node_modules"],
+  "coveragePathIgnorePatterns": ["node_modules", "index.ts"],
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      {
+        "tsconfig": "tsconfig.test.json"
+      }
+    ]
   },
   "collectCoverageFrom": ["<rootDir>/src/**/*.(t|j)s"],
   "coverageDirectory": "../coverage"

@@ -4,9 +4,9 @@ import pidusage, { Status } from 'pidusage'
 
 import { logger } from '../utils/logger.utils'
 import { config } from '../config'
-import { retryWithExponentialBackoff, sleep } from '../utils/async.utils'
+import { sleep } from '../utils/async.utils'
+import { retryWithExponentialBackoff } from '../utils/retry.utils'
 import { v4 } from 'uuid'
-import * as process from 'node:process'
 
 const activeProcesses: Record<string, ProcessMeta> = {}
 
@@ -18,7 +18,6 @@ export type ProcessMeta = {
 
 export async function createProcess(existingUid?: string): Promise<Worker> {
   const child = cluster.fork()
-
   const processUid = existingUid ?? registerProcess(child)
 
   if (!processUid) {
@@ -55,8 +54,6 @@ export async function createProcess(existingUid?: string): Promise<Worker> {
     if (config.disableAutoRestart) {
       destroyProcess(processUid)
     }
-
-    checkIfProcessPoolExhausted()
   })
 
   return child
@@ -80,6 +77,8 @@ export function destroyProcess(uid: string): void {
   existingProcess.worker.destroy('sigterm')
 
   delete activeProcesses[uid]
+
+  checkIfProcessPoolExhausted()
 }
 
 export async function recreateProcess(uid: string): Promise<void> {
@@ -91,17 +90,17 @@ export async function recreateProcess(uid: string): Promise<void> {
 
   activeProcess.isBeingRestarted = true
 
-  activeProcess.worker.destroy()
+  activeProcess.worker.destroy('sigterm')
 
-  await sleep(500) // SIGTERM can take some time to be applied
-
-  let child: Worker | null
-
-  if (config.useExponentialBackoff) {
-    child = await attemptToCreateProcessWithExponentialBackoff(activeProcess, uid)
-  } else {
-    child = await createProcess(uid)
+  while (!activeProcess.worker.isDead()) {
+    await sleep(300)
   }
+
+  const child: Worker | null = await attemptToCreateProcessWithRetry(
+    activeProcess,
+    uid,
+    config.useExponentialBackoff ? 'exp' : 'normal',
+  )
 
   activeProcess.isBeingRestarted = false
 
@@ -130,10 +129,13 @@ export async function getResourceConsumptionMetricsForActiveProcesses(): Promise
   return pidusage(processIds)
 }
 
-function attemptToCreateProcessWithExponentialBackoff(
+function attemptToCreateProcessWithRetry(
   processMetadata: ProcessMeta,
   uid: string,
+  strategy: 'exp' | 'normal',
 ): Promise<Worker | null> {
+  const expRate = strategy === 'exp' ? 2 : 0
+
   return retryWithExponentialBackoff({
     fn: async () => {
       const result = await createProcess(uid)
@@ -141,16 +143,19 @@ function attemptToCreateProcessWithExponentialBackoff(
       processMetadata.isAlive = true
       processMetadata.worker = result
 
-      await sleep(500) // Safeguard in case process fails immediately
+      // Safeguard in case process is alive, but node app has not started yet.
+      await sleep(3_000)
 
       if (!processMetadata.isAlive) {
-        result.destroy()
+        result.destroy('sigterm')
         return null
       }
 
       return result
     },
+    retries: config.maxConsecutiveRetries,
     description: 'create process',
+    expRate,
   })
 }
 
@@ -187,6 +192,6 @@ function checkIfProcessPoolExhausted() {
   if (!Object.keys(activeProcesses).length) {
     logger.info(`No active processes remain, exiting.`)
 
-    process.exit(0)
+    return process.exit(0)
   }
 }

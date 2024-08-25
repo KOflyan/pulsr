@@ -10,11 +10,11 @@ import { config, MemoryUnit } from '../config'
 import { nonOverlappingInterval } from '../utils/async.utils'
 import { Status } from 'pidusage'
 
-export function attachClusterListeners(): void {
-  nonOverlappingInterval(metricsCollector, config.metricCollectionIntervalMs)
+export function startMetricsCollection(): NodeJS.Timeout {
+  return nonOverlappingInterval(monitorMetrics, config.metricCollectionIntervalMs)
 }
 
-async function metricsCollector() {
+async function monitorMetrics() {
   let metrics: Record<number, Status>
 
   try {

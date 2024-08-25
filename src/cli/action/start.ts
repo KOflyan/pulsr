@@ -1,16 +1,15 @@
 import cluster, { Worker } from 'node:cluster'
 import { availableParallelism } from 'node:os'
+import * as fs from 'node:fs'
 import { Command } from 'commander'
 import { createProcess } from '../../process/manager'
-import { attachClusterListeners } from '../../process/listeners'
 import { logger } from '../../utils/logger.utils'
 import { config, MaxMemoryRestart, MemoryUnit } from '../../config'
-import * as process from 'node:process'
-import * as fs from 'node:fs'
+import { startMetricsCollection } from '../../process/metrics'
 
-type StartCommandOptions = {
-  maxMemoryRestart?: `<number>B` | `<number>KB` | '<number>MB' | '<number>GB' | number
-  maxConsecutiveRetries: number
+export type StartCommandOptions = {
+  maxMemoryRestart?: number | `${number}KB` | `${number}MB` | `${number}GB`
+  maxConsecutiveRetries?: number
   disableAutoRestart: boolean
   useExponentialBackoff: boolean
   processes?: number
@@ -33,35 +32,44 @@ export function configureStartCommand(program: Command): void {
     .option(
       '--max-consecutive-retries <number>',
       'Maximum consecutive attempts to restart dead process',
-      '3',
+      Number,
     )
-    .option('-p, --processes <number>', 'Number of processes to launch')
+    .option('-p, --processes <number>', 'Number of processes to launch', Number)
     .action(onStart)
 }
 
-async function onStart(path: string, opts: StartCommandOptions): Promise<void> {
+export async function onStart(path: string, opts: StartCommandOptions): Promise<void> {
   if (!fs.existsSync(path)) {
     logger.error(`Could not find executable: ${path}`)
     logger.error(`Please specify correct path to the executable file and try again.`)
 
-    process.exit(1)
+    return process.exit(1)
   }
 
-  if (Number.isNaN(opts.processes) || Number(opts.processes) <= 0) {
+  if (!opts.processes || Number.isNaN(Number(opts.processes)) || Number(opts.processes) <= 0) {
     logger.error('"processes" should be a positive number.')
-    process.exit(1)
+    return process.exit(1)
   }
 
-  if (opts.disableAutoRestart && (opts.maxMemoryRestart || opts.useExponentialBackoff)) {
+  if (
+    opts.disableAutoRestart &&
+    (opts.maxMemoryRestart ||
+      opts.useExponentialBackoff ||
+      !Number.isNaN(Number(opts.maxConsecutiveRetries)))
+  ) {
     logger.error(
-      '"maxMemoryRestart" and "useExponentialBackoff" flags cannot be used together with "disableAutoRestart".',
+      '"maxMemoryRestart", "useExponentialBackoff" and "maxConsecutiveRetries" flags cannot be used together with "disableAutoRestart".',
     )
-    process.exit(1)
+
+    return process.exit(1)
   }
 
-  if (Number.isNaN(opts.maxConsecutiveRetries) || Number(opts.maxConsecutiveRetries) <= 0) {
-    logger.error('"maxRestartAttempts" should be a positive number if specified.')
-    process.exit(1)
+  if (
+    opts.maxConsecutiveRetries != undefined &&
+    (Number.isNaN(Number(opts.maxConsecutiveRetries)) || Number(opts.maxConsecutiveRetries) <= 0)
+  ) {
+    logger.error('"maxConsecutiveRetries" should be a positive number if specified.')
+    return process.exit(1)
   }
 
   populateConfigFromStartOptions(opts)
@@ -73,7 +81,7 @@ async function onStart(path: string, opts: StartCommandOptions): Promise<void> {
 
   const processesToLaunch = config.processes
 
-  attachClusterListeners()
+  startMetricsCollection()
 
   logger.info(`Launching ${processesToLaunch} processes for "${path}" script.`)
 
@@ -87,8 +95,8 @@ async function onStart(path: string, opts: StartCommandOptions): Promise<void> {
 }
 
 function populateConfigFromStartOptions(opts: StartCommandOptions): void {
-  config.processes = opts.processes ?? availableParallelism()
-  config.maxConsecutiveRetries = Number(opts.maxConsecutiveRetries)
+  config.processes = Number(opts.processes) ?? availableParallelism()
+  config.maxConsecutiveRetries = Number(opts.maxConsecutiveRetries ?? 3)
   config.disableAutoRestart = opts.disableAutoRestart
   config.useExponentialBackoff = opts.useExponentialBackoff
   config.maxMemoryRestart = extractMaxMemoryRestartValue(opts)
@@ -120,7 +128,7 @@ function extractMaxMemoryRestartValue({
     )
     logger.error('Example correct input for "maxMemoryRestart": 100, 500KB, 250MB, 1GB')
 
-    process.exit(1)
+    return process.exit(1)
   }
 
   return {

@@ -9,7 +9,7 @@
     "start": "ts-node src/index.ts",
     "build": "rimraf dist && tsc",
     "lint-staged": "lint-staged",
-    "test": "jest --passWithNoTests",
+    "test": "jest --coverage",
     "format": "prettier --write .",
     "lint": "eslint \"{src,test}/**/*.ts\"",
     "lint:fix": "npm run lint -- --fix",
@@ -19,18 +19,18 @@
   },
   "dependencies": {
     "chalk": "4.1.2",
-    "uuid": "10.0.0",
     "commander": "12.1.0",
-    "pidusage": "3.0.2"
+    "pidusage": "3.0.2",
+    "uuid": "10.0.0"
   },
   "devDependencies": {
-    "@types/uuid": "10.0.0",
     "@eslint/eslintrc": "3.1.0",
     "@eslint/js": "9.9.0",
     "@eslint/migrate-config": "1.2.0",
     "@types/jest": "29.5.12",
     "@types/node": "22.2.0",
     "@types/pidusage": "2.0.5",
+    "@types/uuid": "10.0.0",
     "@typescript-eslint/eslint-plugin": "8.0.1",
     "@typescript-eslint/parser": "8.0.1",
     "eslint": "9.9.0",

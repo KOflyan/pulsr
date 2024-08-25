@@ -35,7 +35,7 @@ export class Logger {
     text: string | Buffer,
     level: LogLevel = LogLevel.INFO,
   ): void {
-    if (this.level > level) {
+    if (this.level > level || process.env['LOGGING_DISABLED']) {
       return
     }
 

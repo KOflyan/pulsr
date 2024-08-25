@@ -13,6 +13,7 @@ program
   .name(pkg.name)
   .version(pkg.version, '-v, --version')
   .option('--verbose', 'Enable debug logs')
+  .showHelpAfterError()
 
 const commandConfigurationFunctions: CommandConfigurationFunction[] = [configureStartCommand]
 
