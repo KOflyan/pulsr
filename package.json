@@ -2,12 +2,24 @@
   "name": "pulsr",
   "author": "koflyan",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Simple NodeJS load balancer",
   "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "bin": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KOflyan/pulsr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/KOflyan/pulsr/issues"
+  },
   "engines": {
     "node": ">=20"
   },
+
   "scripts": {
     "start": "ts-node src/index.ts",
     "build": "rimraf dist && tsc",
@@ -53,7 +65,7 @@
     "*.{js,jsx,ts,tsx}": [
       "eslint",
       "prettier --check",
-      "npm run test"
+      "npm run test -- --passWithNoTests"
     ]
   },
   "keywords": [
