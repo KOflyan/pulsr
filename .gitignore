@@ -2,3 +2,5 @@
 .husky/_
 node_modules
 dist/
+coverage
+
