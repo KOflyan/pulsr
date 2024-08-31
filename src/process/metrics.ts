@@ -44,7 +44,7 @@ async function monitorMetrics() {
         `Memory usage threshold of ${config.maxMemoryRestart.readable} exceeded for process "${metric.pid}", current value: ${actualMemoryReadable}. Recreating the process...`,
       )
 
-      await recreateProcess(proc[0])
+      await recreateProcess(proc.uid)
     }
   }
 }

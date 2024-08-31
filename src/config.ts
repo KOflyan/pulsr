@@ -18,11 +18,13 @@ export type AppConfig = {
   disableAutoRestart: boolean
   useExponentialBackoff: boolean
   metricCollectionIntervalMs: number
+  waitTimeBeforeSendingSigKillMs: number
   verbose: boolean
 }
 
 export const config: AppConfig = {
   metricCollectionIntervalMs: 500,
+  waitTimeBeforeSendingSigKillMs: 2_000,
   maxConsecutiveRetries: 3,
   processes: 1,
   useExponentialBackoff: false,

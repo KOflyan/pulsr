@@ -7,7 +7,7 @@ import {
   getPidsOfActiveProcesses,
   getProcessByPid,
   getResourceConsumptionMetricsForActiveProcesses,
-  ProcessMeta,
+  ProcessWithUid,
   recreateProcess,
 } from '../../src/process/manager'
 import { logger } from '../../src/utils/logger.utils'
@@ -33,15 +33,14 @@ describe('Process manager', () => {
     jest.spyOn(process, 'exit').mockImplementation()
   })
 
-  afterEach(() => {
-    getPidsOfActiveProcesses()
-      .map((p) => getProcessByPid(p))
-      .forEach((data) => data && destroyProcess(data[0]))
+  afterEach(async () => {
+    await Promise.all(getPidsOfActiveProcesses().map((p) => destroyProcess(getProcess(p).uid)))
   })
 
   describe('createProcess()', () => {
     it('should register process', async () => {
       const worker = new WorkerMock(1)
+
       jest.spyOn(cluster, 'fork').mockImplementation(() => worker as Worker)
 
       await createProcess()
@@ -50,7 +49,7 @@ describe('Process manager', () => {
 
       const data = getProcessByPid(worker.process.pid)
 
-      expect(data?.[1]).toEqual({
+      expect(data?.meta).toEqual({
         isAlive: true,
         isBeingRestarted: false,
         worker,
@@ -63,6 +62,8 @@ describe('Process manager', () => {
       const worker = new WorkerMock(1)
 
       jest.spyOn(cluster, 'fork').mockImplementation(() => worker as Worker)
+      jest.spyOn(worker, 'isDead').mockImplementation(() => true)
+      jest.spyOn(worker, 'destroy')
 
       await createProcess()
 
@@ -70,8 +71,11 @@ describe('Process manager', () => {
 
       worker.process.stdout.emit('data', 'hello')
       worker.process.stderr.emit('data', 'hello')
+
       worker.emit('error', new Error('msg'))
       worker.emit('disconnect')
+
+      await new Promise((resolve) => setTimeout(resolve, 100))
 
       expect(logger.info).toHaveBeenCalledWith('hello', worker.process.pid)
       expect(logger.error).toHaveBeenCalledWith('hello', worker.process.pid)
@@ -79,7 +83,10 @@ describe('Process manager', () => {
         `Error event received from child process: msg`,
         worker.process.pid,
       )
+
       expect(logger.warn).toHaveBeenCalledWith('Process disconnected!', worker.process.pid)
+      expect(worker.isDead).toHaveBeenCalled()
+      expect(worker.destroy).toHaveBeenCalledWith('sigterm')
       expect(process.exit).toHaveBeenCalled()
     })
   })
@@ -89,17 +96,18 @@ describe('Process manager', () => {
       const worker = new WorkerMock(1)
 
       jest.spyOn(cluster, 'fork').mockImplementation(() => worker as Worker)
+      jest.spyOn(worker, 'isDead').mockImplementation(() => true)
 
       await createProcess()
 
-      expect(getProcessByPid(1)).toEqual([
-        expect.any(String),
-        {
+      expect(getProcessByPid(1)).toEqual({
+        uid: expect.any(String),
+        meta: {
           isAlive: true,
           isBeingRestarted: false,
           worker,
         },
-      ])
+      })
     })
 
     it('should return null if process with provided pid is not registered', () => {
@@ -113,10 +121,10 @@ describe('Process manager', () => {
 
       jest.spyOn(cluster, 'fork').mockImplementation(() => worker as Worker)
 
-      const [uid, proc] = await createProcessAndAttachSpy(worker)
-      const destroySpy = jest.spyOn(proc.worker, 'destroy')
+      const processWithUid = await createProcessAndReturnMeta(worker)
+      const destroySpy = jest.spyOn(processWithUid.meta.worker, 'destroy')
 
-      destroyProcess(uid)
+      await destroyProcess(processWithUid.uid)
 
       expect(destroySpy).toHaveBeenCalledWith('sigterm')
 
@@ -139,14 +147,14 @@ describe('Process manager', () => {
 
       const retrySpy = jest.spyOn(retryUtils, 'retryWithExponentialBackoff')
 
-      const [uid, proc] = await createProcessAndAttachSpy(worker1)
-      const destroySpy = jest.spyOn(proc.worker, 'destroy')
+      const processWithUid = await createProcessAndReturnMeta(worker1)
+      const destroySpy = jest.spyOn(processWithUid.meta.worker, 'destroy')
       const isDeadSpy = jest
-        .spyOn(proc.worker, 'isDead')
+        .spyOn(processWithUid.meta.worker, 'isDead')
         .mockImplementationOnce(() => false)
         .mockImplementationOnce(() => true)
 
-      await recreateProcess(uid)
+      await recreateProcess(processWithUid.uid)
 
       expect(destroySpy).toHaveBeenCalled()
       expect(isDeadSpy).toHaveBeenCalledTimes(2)
@@ -179,15 +187,15 @@ describe('Process manager', () => {
         })
         .mockImplementationOnce(() => worker2 as Worker)
 
-      const [uid, proc] = await createProcessAndAttachSpy(worker1)
+      const procWithUid = await createProcessAndReturnMeta(worker1)
       const retrySpy = jest.spyOn(retryUtils, 'retryWithExponentialBackoff')
 
       const isDeadSpy = jest
-        .spyOn(proc.worker, 'isDead')
+        .spyOn(procWithUid.meta.worker, 'isDead')
         .mockImplementationOnce(() => false)
         .mockImplementationOnce(() => true)
 
-      await recreateProcess(uid)
+      await recreateProcess(procWithUid.uid)
 
       expect(isDeadSpy).toHaveBeenCalledTimes(2)
       expect(retrySpy).toHaveBeenCalledWith({
@@ -229,13 +237,17 @@ describe('Process manager', () => {
   })
 })
 
-async function createProcessAndAttachSpy(worker: WorkerMock): Promise<[string, ProcessMeta]> {
+async function createProcessAndReturnMeta(worker: WorkerMock): Promise<ProcessWithUid> {
   await createProcess()
 
-  const data = getProcessByPid(worker.process.pid)
+  return getProcess(worker.process.pid)
+}
+
+function getProcess(pid: number): ProcessWithUid {
+  const data = getProcessByPid(pid)
 
   if (!data) {
-    return fail(`No process found for pid: ${worker.process.pid}`)
+    return fail(`No process found for pid: ${pid}`)
   }
 
   return data

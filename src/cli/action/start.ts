@@ -12,6 +12,7 @@ export type StartCommandOptions = {
   maxConsecutiveRetries?: number
   disableAutoRestart: boolean
   useExponentialBackoff: boolean
+  sendSigkillAfter: number
   processes?: number
 }
 
@@ -21,13 +22,19 @@ export function configureStartCommand(program: Command): void {
     .argument('<file_path>', 'Path to a NodeJS script to execute')
     .option(
       '--max-memory-restart <memory>',
-      'Maximum allowed memory for a child process. When reached, the process will be automatically restarted.',
+      'Maximum allowed memory for a child process. When reached, the process will be automatically restarted. Example values: 10000, 10000B, 1000KB, 300MB, 1GB',
     )
     .option('--disable-auto-restart', 'Do not attempt to restart dead process', false)
     .option(
       '--use-exponential-backoff',
       'Use exponential backoff when restarting dead process',
       false,
+    )
+    .option(
+      '--send-sigkill-after <ms>',
+      'Send sigkill after this amount of time after sigterm if process did not terminate (milliseconds)',
+      Number,
+      2_000,
     )
     .option(
       '--max-consecutive-retries <number>',
@@ -48,6 +55,11 @@ export async function onStart(path: string, opts: StartCommandOptions): Promise<
 
   if (!opts.processes || Number.isNaN(Number(opts.processes)) || Number(opts.processes) <= 0) {
     logger.error('"processes" should be a positive number.')
+    return process.exit(1)
+  }
+
+  if (Number.isNaN(Number(opts.sendSigkillAfter)) || opts.sendSigkillAfter <= 0) {
+    logger.error('"--send-sigkill-after" should be a positive number if specified.')
     return process.exit(1)
   }
 
@@ -96,10 +108,12 @@ export async function onStart(path: string, opts: StartCommandOptions): Promise<
 
 function populateConfigFromStartOptions(opts: StartCommandOptions): void {
   config.processes = Number(opts.processes) ?? availableParallelism()
-  config.maxConsecutiveRetries = Number(opts.maxConsecutiveRetries ?? 3)
+  config.maxConsecutiveRetries = Number(opts.maxConsecutiveRetries ?? config.maxConsecutiveRetries)
   config.disableAutoRestart = opts.disableAutoRestart
   config.useExponentialBackoff = opts.useExponentialBackoff
   config.maxMemoryRestart = extractMaxMemoryRestartValue(opts)
+  config.waitTimeBeforeSendingSigKillMs =
+    opts.sendSigkillAfter ?? config.waitTimeBeforeSendingSigKillMs
 }
 
 function extractMaxMemoryRestartValue({

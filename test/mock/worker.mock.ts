@@ -21,7 +21,7 @@ export class WorkerMock extends EventEmitter {
   destroy(_sig?: string): void {}
 
   isDead(): boolean {
-    return false
+    return true
   }
 
   constructor(pid: number) {

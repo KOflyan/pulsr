@@ -68,7 +68,7 @@ describe('Metrics', () => {
 
       const data = getProcessByPid(2)
 
-      expect(recreateProcessSpy).toHaveBeenCalledWith(data?.[0])
+      expect(recreateProcessSpy).toHaveBeenCalledWith(data?.uid)
 
       clearTimeout(t)
     })

@@ -16,6 +16,11 @@ export type ProcessMeta = {
   isAlive: boolean
 }
 
+export type ProcessWithUid = {
+  uid: string
+  meta: ProcessMeta
+}
+
 export async function createProcess(existingUid?: string): Promise<Worker> {
   const child = cluster.fork()
   const processUid = existingUid ?? registerProcess(child)
@@ -52,7 +57,7 @@ export async function createProcess(existingUid?: string): Promise<Worker> {
     }
 
     if (config.disableAutoRestart) {
-      destroyProcess(processUid)
+      await destroyProcess(processUid)
     }
   })
 
@@ -63,18 +68,20 @@ export function getPidsOfActiveProcesses(): number[] {
   return Object.values(activeProcesses).map((p) => p.worker.process.pid) as number[]
 }
 
-export function getProcessByPid(pid: number): [string, ProcessMeta] | null {
-  return Object.entries(activeProcesses).find(([_, p]) => p.worker.process.pid === pid) ?? null
+export function getProcessByPid(pid: number): ProcessWithUid | null {
+  const data = Object.entries(activeProcesses).find(([_, p]) => p.worker.process.pid === pid)
+
+  return data ? { uid: data[0], meta: data[1] } : null
 }
 
-export function destroyProcess(uid: string): void {
+export async function destroyProcess(uid: string): Promise<void> {
   const existingProcess = activeProcesses[uid]
 
   if (!existingProcess) {
     throw new Error(`No process is registered for the uid: "${uid}"`)
   }
 
-  existingProcess.worker.destroy('sigterm')
+  await killProcess(existingProcess.worker)
 
   delete activeProcesses[uid]
 
@@ -90,11 +97,7 @@ export async function recreateProcess(uid: string): Promise<void> {
 
   activeProcess.isBeingRestarted = true
 
-  activeProcess.worker.destroy('sigterm')
-
-  while (!activeProcess.worker.isDead()) {
-    await sleep(300)
-  }
+  await killProcess(activeProcess.worker)
 
   const child: Worker | null = await attemptToCreateProcessWithRetry(
     activeProcess,
@@ -147,7 +150,7 @@ function attemptToCreateProcessWithRetry(
       await sleep(3_000)
 
       if (!processMetadata.isAlive) {
-        result.destroy('sigterm')
+        await killProcess(result)
         return null
       }
 
@@ -188,10 +191,27 @@ function extractPid(worker: Worker): number {
   return pid
 }
 
-function checkIfProcessPoolExhausted() {
+function checkIfProcessPoolExhausted(): void {
   if (!Object.keys(activeProcesses).length) {
     logger.info(`No active processes remain, exiting.`)
 
     return process.exit(0)
+  }
+}
+
+async function killProcess(worker: Worker): Promise<void> {
+  const sigTermSentAt = new Date()
+
+  worker.destroy('sigterm')
+
+  while (!worker.isDead()) {
+    await sleep(300)
+
+    const timeElapsed = new Date().getMilliseconds() - sigTermSentAt.getMilliseconds()
+
+    if (timeElapsed > config.waitTimeBeforeSendingSigKillMs) {
+      worker.destroy('sigkill')
+      break
+    }
   }
 }

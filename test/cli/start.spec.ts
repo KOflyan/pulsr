@@ -34,7 +34,7 @@ describe('start command', () => {
       expect(argumentSpy).toHaveBeenCalledWith('<file_path>', 'Path to a NodeJS script to execute')
       expect(optionSpy).toHaveBeenCalledWith(
         '--max-memory-restart <memory>',
-        'Maximum allowed memory for a child process. When reached, the process will be automatically restarted.',
+        'Maximum allowed memory for a child process. When reached, the process will be automatically restarted. Example values: 10000, 10000B, 1000KB, 300MB, 1GB',
       )
       expect(optionSpy).toHaveBeenCalledWith(
         '--disable-auto-restart',
@@ -96,6 +96,7 @@ describe('start command', () => {
       await onStart(scriptPath, {
         processes: 1,
         maxConsecutiveRetries: 'asd',
+        sendSigkillAfter: 2_000,
       } as unknown as StartCommandOptions)
 
       expect(logger.error).toHaveBeenCalledWith(
@@ -106,6 +107,7 @@ describe('start command', () => {
       await onStart(scriptPath, {
         processes: 1,
         maxConsecutiveRetries: -1,
+        sendSigkillAfter: 2_000,
       } as unknown as StartCommandOptions)
 
       expect(logger.error).toHaveBeenCalledWith(
@@ -119,6 +121,7 @@ describe('start command', () => {
         processes: 1,
         disableAutoRestart: true,
         maxConsecutiveRetries: 3,
+        sendSigkillAfter: 2_000,
       } as unknown as StartCommandOptions)
 
       expect(logger.error).toHaveBeenCalledWith(
@@ -153,6 +156,7 @@ describe('start command', () => {
       await onStart(scriptPath, {
         processes: 1,
         maxMemoryRestart: 'asd',
+        sendSigkillAfter: 2_000,
       } as unknown as StartCommandOptions)
 
       expect(logger.error).toHaveBeenCalledWith(
@@ -166,6 +170,7 @@ describe('start command', () => {
       await onStart(scriptPath, {
         processes: 1,
         maxMemoryRestart: '1000M',
+        sendSigkillAfter: 2_000,
       } as unknown as StartCommandOptions)
 
       expect(logger.error).toHaveBeenCalledWith(
@@ -177,6 +182,31 @@ describe('start command', () => {
       expect(process.exit).toHaveBeenCalledWith(1)
     })
 
+    it('should exit if "waitTimeBeforeSendingSigKillMs" is incorrect', async () => {
+      await onStart(scriptPath, {
+        processes: 1,
+        maxMemoryRestart: '100MB',
+      } as unknown as StartCommandOptions)
+
+      expect(logger.error).toHaveBeenCalledWith(
+        `"--send-sigkill-after" should be a positive number if specified.`,
+      )
+
+      expect(process.exit).toHaveBeenCalledWith(1)
+
+      await onStart(scriptPath, {
+        processes: 1,
+        maxMemoryRestart: '100MB',
+        sendSigkillAfter: -2_000,
+      } as unknown as StartCommandOptions)
+
+      expect(logger.error).toHaveBeenCalledWith(
+        `"--send-sigkill-after" should be a positive number if specified.`,
+      )
+
+      expect(process.exit).toHaveBeenCalledWith(1)
+    })
+
     it('should populate config object from input options', async () => {
       await onStart(scriptPath, {
         processes: 1,
@@ -184,6 +214,7 @@ describe('start command', () => {
         useExponentialBackoff: true,
         disableAutoRestart: false,
         maxMemoryRestart: '300MB',
+        sendSigkillAfter: 2_000,
       })
 
       expect(config).toEqual({
@@ -194,6 +225,7 @@ describe('start command', () => {
         verbose: false,
         disableAutoRestart: false,
         maxMemoryRestart: { unit: MemoryUnit.MB, value: 300, readable: '300MB' },
+        waitTimeBeforeSendingSigKillMs: 2_000,
       })
     })
 
@@ -204,6 +236,7 @@ describe('start command', () => {
         useExponentialBackoff: true,
         disableAutoRestart: false,
         maxMemoryRestart: '300MB',
+        sendSigkillAfter: 2_000,
       })
 
       expect(cluster.setupPrimary).toHaveBeenCalledWith({
