@@ -4,6 +4,7 @@ import pidusage from 'pidusage'
 import {
   createProcess,
   destroyProcess,
+  getActiveProcesses,
   getPidsOfActiveProcesses,
   getProcessByPid,
   getResourceConsumptionMetricsForActiveProcesses,
@@ -34,7 +35,7 @@ describe('Process manager', () => {
   })
 
   afterEach(async () => {
-    await Promise.all(getPidsOfActiveProcesses().map((p) => destroyProcess(getProcess(p).uid)))
+    await Promise.all(Object.keys(getActiveProcesses()).map((uid) => destroyProcess(uid)))
   })
 
   describe('createProcess()', () => {

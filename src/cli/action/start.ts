@@ -6,10 +6,11 @@ import { createProcess } from '../../process/manager'
 import { logger } from '../../utils/logger.utils'
 import { config, MaxMemoryRestart, MemoryUnit } from '../../config'
 import { startMetricsCollection } from '../../process/metrics'
+import { registerGracefulShutdown } from '../../process/shutdown'
 
 export type StartCommandOptions = {
   maxMemoryRestart?: number | `${number}KB` | `${number}MB` | `${number}GB`
-  maxConsecutiveRetries?: number
+  maxConsecutiveRetries: number
   disableAutoRestart: boolean
   useExponentialBackoff: boolean
   sendSigkillAfter: number
@@ -19,29 +20,35 @@ export type StartCommandOptions = {
 export function configureStartCommand(program: Command): void {
   program
     .command('start')
-    .argument('<file_path>', 'Path to a NodeJS script to execute')
+    .argument('<file_path>', 'Path to a NodeJS script to execute.')
     .option(
       '--max-memory-restart <memory>',
-      'Maximum allowed memory for a child process. When reached, the process will be automatically restarted. Example values: 10000, 10000B, 1000KB, 300MB, 1GB',
+      'Maximum allowed memory for a child process. When reached, the process will be automatically restarted. Example values: 10000, 10000B, 1000KB, 300MB, 1GB.',
     )
-    .option('--disable-auto-restart', 'Do not attempt to restart dead process', false)
+    .option('--disable-auto-restart', 'Do not attempt to restart dead process.', false)
     .option(
       '--use-exponential-backoff',
-      'Use exponential backoff when restarting dead process',
+      'Use exponential backoff when restarting dead process.',
       false,
     )
     .option(
       '--send-sigkill-after <ms>',
-      'Send sigkill after this amount of time after sigterm if process did not terminate (milliseconds)',
+      'Send sigkill after this amount of time after sigterm if process did not terminate (milliseconds).',
       Number,
       2_000,
     )
     .option(
       '--max-consecutive-retries <number>',
-      'Maximum consecutive attempts to restart dead process',
+      'Maximum consecutive attempts to restart dead process.',
       Number,
+      config.maxConsecutiveRetries,
     )
-    .option('-p, --processes <number>', 'Number of processes to launch', Number)
+    .option(
+      '-p, --processes <number>',
+      'Number of processes to launch.',
+      Number,
+      availableParallelism(),
+    )
     .action(onStart)
 }
 
@@ -76,15 +83,13 @@ export async function onStart(path: string, opts: StartCommandOptions): Promise<
     return process.exit(1)
   }
 
-  if (
-    opts.maxConsecutiveRetries != undefined &&
-    (Number.isNaN(Number(opts.maxConsecutiveRetries)) || Number(opts.maxConsecutiveRetries) <= 0)
-  ) {
+  if (Number.isNaN(Number(opts.maxConsecutiveRetries)) || Number(opts.maxConsecutiveRetries) <= 0) {
     logger.error('"maxConsecutiveRetries" should be a positive number if specified.')
     return process.exit(1)
   }
 
   populateConfigFromStartOptions(opts)
+  registerGracefulShutdown()
 
   cluster.setupPrimary({
     exec: path,
@@ -107,8 +112,8 @@ export async function onStart(path: string, opts: StartCommandOptions): Promise<
 }
 
 function populateConfigFromStartOptions(opts: StartCommandOptions): void {
-  config.processes = Number(opts.processes) ?? availableParallelism()
-  config.maxConsecutiveRetries = Number(opts.maxConsecutiveRetries ?? config.maxConsecutiveRetries)
+  config.processes = Number(opts.processes)
+  config.maxConsecutiveRetries = Number(opts.maxConsecutiveRetries)
   config.disableAutoRestart = opts.disableAutoRestart
   config.useExponentialBackoff = opts.useExponentialBackoff
   config.maxMemoryRestart = extractMaxMemoryRestartValue(opts)

@@ -6,12 +6,21 @@ import {
   recreateProcess,
 } from './manager'
 import { logger } from '../utils/logger.utils'
-import { config, MemoryUnit } from '../config'
+import { config, MemoryUnit, configuredTimers } from '../config'
 import { nonOverlappingInterval } from '../utils/async.utils'
 import { Status } from 'pidusage'
 
 export function startMetricsCollection(): NodeJS.Timeout {
-  return nonOverlappingInterval(monitorMetrics, config.metricCollectionIntervalMs)
+  if (configuredTimers.metricsCollectionTimer) {
+    throw new Error('Metrics collection is already in progress!')
+  }
+
+  configuredTimers.metricsCollectionTimer = nonOverlappingInterval(
+    monitorMetrics,
+    config.metricCollectionIntervalMs,
+  )
+
+  return configuredTimers.metricsCollectionTimer
 }
 
 async function monitorMetrics() {
@@ -20,6 +29,7 @@ async function monitorMetrics() {
   try {
     metrics = await getResourceConsumptionMetricsForActiveProcesses()
   } catch (e) {
+    console.log(e)
     logger.error(
       `Failed to collect metrics for the PIDs (${Object.keys(getPidsOfActiveProcesses())}): ${(e as Error).message} `,
     )

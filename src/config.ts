@@ -11,6 +11,10 @@ export type MaxMemoryRestart = {
   readable: string
 }
 
+export type Timers = {
+  metricsCollectionTimer?: NodeJS.Timeout
+}
+
 export type AppConfig = {
   maxMemoryRestart?: MaxMemoryRestart
   processes: number
@@ -22,6 +26,7 @@ export type AppConfig = {
   verbose: boolean
 }
 
+export const configuredTimers: Timers = {}
 export const config: AppConfig = {
   metricCollectionIntervalMs: 500,
   waitTimeBeforeSendingSigKillMs: 2_000,

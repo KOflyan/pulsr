@@ -2,7 +2,7 @@ import cluster, { Worker } from 'node:cluster'
 import pidusage from 'pidusage'
 import { createProcess, getProcessByPid } from '../../src/process/manager'
 import { WorkerMock } from '../mock/worker.mock'
-import { config, MemoryUnit } from '../../src/config'
+import { config, configuredTimers, MemoryUnit, Timers } from '../../src/config'
 import { sleep } from '../../src/utils/async.utils'
 import * as manager from '../../src/process/manager'
 import { startMetricsCollection } from '../../src/process/metrics'
@@ -19,6 +19,7 @@ describe('Metrics', () => {
       (k) =>
         ((config as Record<string, unknown>)[k] = (originalConfig as Record<string, unknown>)[k]),
     )
+    Object.keys(configuredTimers).forEach((k) => delete configuredTimers[k as keyof Timers])
 
     jest.spyOn(process, 'exit').mockImplementation()
   })

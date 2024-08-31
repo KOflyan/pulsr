@@ -64,6 +64,10 @@ export async function createProcess(existingUid?: string): Promise<Worker> {
   return child
 }
 
+export function getActiveProcesses(): Record<string, ProcessMeta> {
+  return activeProcesses
+}
+
 export function getPidsOfActiveProcesses(): number[] {
   return Object.values(activeProcesses).map((p) => p.worker.process.pid) as number[]
 }
@@ -151,6 +155,7 @@ function attemptToCreateProcessWithRetry(
 
       if (!processMetadata.isAlive) {
         await killProcess(result)
+
         return null
       }
 
@@ -202,14 +207,17 @@ function checkIfProcessPoolExhausted(): void {
 async function killProcess(worker: Worker): Promise<void> {
   const sigTermSentAt = new Date()
 
+  logger.info(`Sending SIGTERM to process "${worker.process.pid}".`)
+
   worker.destroy('sigterm')
 
   while (!worker.isDead()) {
     await sleep(300)
 
-    const timeElapsed = new Date().getMilliseconds() - sigTermSentAt.getMilliseconds()
+    const timeElapsed = new Date().getTime() - sigTermSentAt.getTime()
 
     if (timeElapsed > config.waitTimeBeforeSendingSigKillMs) {
+      logger.info(`Process "${worker.process.pid}" failed to terminate on time, sending SIGKILL.`)
       worker.destroy('sigkill')
       break
     }

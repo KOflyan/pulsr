@@ -6,6 +6,7 @@ import { config, MemoryUnit } from '../../src/config'
 import { createProcess } from '../../src/process/manager'
 import { startMetricsCollection } from '../../src/process/metrics'
 import cluster from 'node:cluster'
+import { availableParallelism } from 'node:os'
 
 jest.mock('node:cluster')
 jest.mock('../../src/process/metrics')
@@ -31,31 +32,35 @@ describe('start command', () => {
       configureStartCommand(cmd)
 
       expect(commandSpy).toHaveBeenCalledWith('start')
-      expect(argumentSpy).toHaveBeenCalledWith('<file_path>', 'Path to a NodeJS script to execute')
+      expect(argumentSpy).toHaveBeenCalledWith('<file_path>', 'Path to a NodeJS script to execute.')
       expect(optionSpy).toHaveBeenCalledWith(
         '--max-memory-restart <memory>',
-        'Maximum allowed memory for a child process. When reached, the process will be automatically restarted. Example values: 10000, 10000B, 1000KB, 300MB, 1GB',
+        'Maximum allowed memory for a child process. When reached, the process will be automatically restarted. Example values: 10000, 10000B, 1000KB, 300MB, 1GB.',
       )
       expect(optionSpy).toHaveBeenCalledWith(
         '--disable-auto-restart',
-        'Do not attempt to restart dead process',
+        'Do not attempt to restart dead process.',
         false,
       )
       expect(optionSpy).toHaveBeenCalledWith(
         '--use-exponential-backoff',
-        'Use exponential backoff when restarting dead process',
+        'Use exponential backoff when restarting dead process.',
         false,
       )
       expect(optionSpy).toHaveBeenCalledWith(
         '--max-consecutive-retries <number>',
-        'Maximum consecutive attempts to restart dead process',
+        'Maximum consecutive attempts to restart dead process.',
         Number,
+        config.maxConsecutiveRetries,
       )
+
       expect(optionSpy).toHaveBeenCalledWith(
         '-p, --processes <number>',
-        'Number of processes to launch',
+        'Number of processes to launch.',
         Number,
+        availableParallelism(),
       )
+
       expect(actionSpy).toHaveBeenCalledWith(onStart)
     })
   })
@@ -157,6 +162,7 @@ describe('start command', () => {
         processes: 1,
         maxMemoryRestart: 'asd',
         sendSigkillAfter: 2_000,
+        maxConsecutiveRetries: 3,
       } as unknown as StartCommandOptions)
 
       expect(logger.error).toHaveBeenCalledWith(
@@ -171,6 +177,7 @@ describe('start command', () => {
         processes: 1,
         maxMemoryRestart: '1000M',
         sendSigkillAfter: 2_000,
+        maxConsecutiveRetries: 3,
       } as unknown as StartCommandOptions)
 
       expect(logger.error).toHaveBeenCalledWith(
