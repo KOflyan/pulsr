@@ -121,27 +121,16 @@ describe('start command', () => {
       expect(process.exit).toHaveBeenCalledWith(1)
     })
 
-    it('should exit if "disableAutoRestart" is used together with "useExponentialBackoff", "maxMemoryRestart" or "maxConsecutiveRetries"', async () => {
-      await onStart(scriptPath, {
-        processes: 1,
-        disableAutoRestart: true,
-        maxConsecutiveRetries: 3,
-        sendSigkillAfter: 2_000,
-      } as unknown as StartCommandOptions)
-
-      expect(logger.error).toHaveBeenCalledWith(
-        '"maxMemoryRestart", "useExponentialBackoff" and "maxConsecutiveRetries" flags cannot be used together with "disableAutoRestart".',
-      )
-      expect(process.exit).toHaveBeenCalledWith(1)
-
+    it('should exit if "disableAutoRestart" is used together with "useExponentialBackoff" or "maxMemoryRestart"', async () => {
       await onStart(scriptPath, {
         processes: 1,
         disableAutoRestart: true,
         maxMemoryRestart: 12345,
+        sendSigkillAfter: 2000,
       } as unknown as StartCommandOptions)
 
       expect(logger.error).toHaveBeenCalledWith(
-        '"maxMemoryRestart", "useExponentialBackoff" and "maxConsecutiveRetries" flags cannot be used together with "disableAutoRestart".',
+        '"maxMemoryRestart" and "useExponentialBackoff" flags cannot be used together with "disableAutoRestart".',
       )
       expect(process.exit).toHaveBeenCalledWith(1)
 
@@ -149,10 +138,11 @@ describe('start command', () => {
         processes: 1,
         disableAutoRestart: true,
         useExponentialBackoff: true,
+        sendSigkillAfter: 2000,
       } as unknown as StartCommandOptions)
 
       expect(logger.error).toHaveBeenCalledWith(
-        '"maxMemoryRestart", "useExponentialBackoff" and "maxConsecutiveRetries" flags cannot be used together with "disableAutoRestart".',
+        '"maxMemoryRestart" and "useExponentialBackoff" flags cannot be used together with "disableAutoRestart".',
       )
       expect(process.exit).toHaveBeenCalledWith(1)
     })

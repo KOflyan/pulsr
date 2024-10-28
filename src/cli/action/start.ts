@@ -70,14 +70,9 @@ export async function onStart(path: string, opts: StartCommandOptions): Promise<
     return process.exit(1)
   }
 
-  if (
-    opts.disableAutoRestart &&
-    (opts.maxMemoryRestart ||
-      opts.useExponentialBackoff ||
-      !Number.isNaN(Number(opts.maxConsecutiveRetries)))
-  ) {
+  if (opts.disableAutoRestart && (opts.maxMemoryRestart || opts.useExponentialBackoff)) {
     logger.error(
-      '"maxMemoryRestart", "useExponentialBackoff" and "maxConsecutiveRetries" flags cannot be used together with "disableAutoRestart".',
+      '"maxMemoryRestart" and "useExponentialBackoff" flags cannot be used together with "disableAutoRestart".',
     )
 
     return process.exit(1)

@@ -2,7 +2,7 @@
   "name": "pulsr",
   "author": "koflyan",
   "license": "MIT",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Simple NodeJS load balancer",
   "main": "dist/index.js",
   "files": [
@@ -19,7 +19,6 @@
   "engines": {
     "node": ">=20"
   },
-
   "scripts": {
     "start": "ts-node src/index.ts",
     "build": "rimraf dist && tsc",
