@@ -15,6 +15,7 @@ export type StartCommandOptions = {
   useExponentialBackoff: boolean
   sendSigkillAfter: number
   processes?: number
+  overrideChildStdio: boolean
 }
 
 export function configureStartCommand(program: Command): void {
@@ -42,6 +43,11 @@ export function configureStartCommand(program: Command): void {
       'Maximum consecutive attempts to restart dead process.',
       Number,
       config.maxConsecutiveRetries,
+    )
+    .option(
+      '--override-child-stdio',
+      'Override stdio of child processes, piping stdout/stderr to custom logger',
+      config.overrideChildStdio,
     )
     .option(
       '-p, --processes <number>',
@@ -88,7 +94,7 @@ export async function onStart(path: string, opts: StartCommandOptions): Promise<
 
   cluster.setupPrimary({
     exec: path,
-    silent: true,
+    silent: config.overrideChildStdio,
   })
 
   const processesToLaunch = config.processes
@@ -114,6 +120,7 @@ function populateConfigFromStartOptions(opts: StartCommandOptions): void {
   config.maxMemoryRestart = extractMaxMemoryRestartValue(opts)
   config.waitTimeBeforeSendingSigKillMs =
     opts.sendSigkillAfter ?? config.waitTimeBeforeSendingSigKillMs
+  config.overrideChildStdio = opts.overrideChildStdio
 }
 
 function extractMaxMemoryRestartValue({

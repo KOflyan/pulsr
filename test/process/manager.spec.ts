@@ -60,6 +60,8 @@ describe('Process manager', () => {
 
     it('should attach event listeners', async () => {
       config.disableAutoRestart = true
+      config.overrideChildStdio = true
+
       const worker = new WorkerMock(1)
 
       jest.spyOn(cluster, 'fork').mockImplementation(() => worker as Worker)

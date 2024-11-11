@@ -2,7 +2,7 @@
   "name": "pulsr",
   "author": "koflyan",
   "license": "MIT",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Simple NodeJS load balancer",
   "main": "dist/index.js",
   "files": [

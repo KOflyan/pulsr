@@ -29,8 +29,10 @@ export async function createProcess(existingUid?: string): Promise<Worker> {
     throw new Error(`Could not register process!`)
   }
 
-  child.process.stdout?.on('data', (data) => logger.info(data, child.process.pid))
-  child.process.stderr?.on('data', (data) => logger.error(data, child.process.pid))
+  if (config.overrideChildStdio) {
+    child.process.stdout?.on('data', (data) => logger.info(data, child.process.pid))
+    child.process.stderr?.on('data', (data) => logger.error(data, child.process.pid))
+  }
 
   child.on('error', (e) => {
     logger.error(`Error event received from child process: ${e.message}`, child.process.pid)

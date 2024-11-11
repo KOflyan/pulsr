@@ -212,10 +212,12 @@ describe('start command', () => {
         disableAutoRestart: false,
         maxMemoryRestart: '300MB',
         sendSigkillAfter: 2_000,
+        overrideChildStdio: false,
       })
 
       expect(config).toEqual({
         metricCollectionIntervalMs: 500,
+        overrideChildStdio: false,
         maxConsecutiveRetries: 5,
         processes: 1,
         useExponentialBackoff: true,
@@ -234,11 +236,12 @@ describe('start command', () => {
         disableAutoRestart: false,
         maxMemoryRestart: '300MB',
         sendSigkillAfter: 2_000,
+        overrideChildStdio: false,
       })
 
       expect(cluster.setupPrimary).toHaveBeenCalledWith({
         exec: scriptPath,
-        silent: true,
+        silent: false,
       })
       expect(createProcess).toHaveBeenCalledTimes(3)
       expect(startMetricsCollection).toHaveBeenCalledTimes(1)

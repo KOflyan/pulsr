@@ -24,6 +24,7 @@ export type AppConfig = {
   metricCollectionIntervalMs: number
   waitTimeBeforeSendingSigKillMs: number
   verbose: boolean
+  overrideChildStdio: boolean
 }
 
 export const configuredTimers: Timers = {}
@@ -35,4 +36,5 @@ export const config: AppConfig = {
   useExponentialBackoff: false,
   verbose: false,
   disableAutoRestart: false,
+  overrideChildStdio: false,
 }
